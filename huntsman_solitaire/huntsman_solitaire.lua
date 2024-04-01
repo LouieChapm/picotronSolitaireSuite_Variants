@@ -1,4 +1,4 @@
---[[pod_format="raw",created="2024-03-22 19:08:40",modified="2024-03-28 20:19:00",revision=3312]]
+--[[pod_format="raw",created="2024-03-22 19:08:40",modified="2024-03-31 22:58:48",revision=3545]]
 
 function game_load() -- !!! start of game load function
 -- this is to prevent overwriting of game modes
@@ -33,7 +33,7 @@ cards_api_shadows_enable(true)
 function game_setup()
 
 	-- save data is based on lua file's name
-	game_save = cards_api_load() or {
+	game_save = suite_load_save() or {
 		wins = 0
 	}	
 	
@@ -102,7 +102,7 @@ function game_setup()
 	
 	button_simple_text("Exit", 6, 248, function()
 		rule_cards = nil
-		cards_api_exit()
+		suite_exit_game()
 	end).always_active = true
 	
 	-- rules cards 
@@ -151,7 +151,9 @@ end
 
 -- deals the cards out
 function game_setup_anim()
-
+	deck_reserve.has_been_emptied = false
+	deck_stack.has_been_emptied = false
+	
 	is_setting_up = true
 
 	-- deal out goal cards
@@ -207,100 +209,16 @@ function game_setup_anim()
 end
 
 -- places all the cards back onto the main deck
-function game_reset_anim()
-	deck_reserve.has_been_emptied = false
-	deck_stack.has_been_emptied = false
-	
+function game_reset_anim()	
 	for c in all(deck_stack.cards) do 
 		c.a_to = 0.5
 	end
-
-	for a in all{stacks_supply, stack_goals, {deck_playable}, {deck_reserve}} do
-		for s in all(a) do
-			while #s.cards > 0 do
-				local c = get_top_card(s)
-				stack_add_card(deck_stack, c)
-				c.a_to = 0.5
-				pause_frames(3)
-			end
-		end
-	end
 	
-	pause_frames(35)
+	deck_stack.has_been_emptied = false
 	
-	game_shuffle_anim()
-	game_shuffle_anim()
-	game_shuffle_anim()
+	stack_collecting_anim(deck_stack, stacks_supply, stack_goals, deck_reserve)
 	
 	game_setup_anim()
-end
-
--- physically shuffle the cards
-function game_shuffle_anim()
-	local temp_stack = stack_new(
-		nil, deck_stack.x_to + card_width + 4, deck_stack.y_to, 
-		stack_repose_static(-0.16), 
-		false, stack_cant, stack_cant)
-		
-	for i = 1, rnd(10)-5 + #deck_stack.cards/2 do
-		stack_add_card(temp_stack, get_top_card(deck_stack))
-	end
-	
-	pause_frames(30)
-	
-	for c in all(temp_stack.cards) do
-		stack_add_card(deck_stack, c, rnd(#deck_stack.cards+1)\1+1)
-	end
-	for c in all(deck_stack.cards) do
-		card_to_top(c)
-	end
-	del(stacks_all, temp_stack)
-	
-	pause_frames(20)
-end
-
--- goes through each card and plays a card where it expects
--- easier than double clicking each card
-function game_auto_place_anim()
-	local found = true
-	
-	local function find_placement(stack)
-		-- create temp stack with top card
-		local card = get_top_card(stack)
-		if not card then
-			return
-		end
-		local temp_stack = unstack_cards(card)
-	
-		-- check with each goal stack if card can be placed
-		for g in all(stack_goals) do
-			if g:can_stack(temp_stack) then
-				found = true
-				card.a_to = 0
-				stack_cards(g, temp_stack)
-				break
-			end
-		end
-		
-		-- return card to original stack
-		if not found then
-			stack_cards(stack, temp_stack)
-		end
-	end
-	
-	while found do
-		found = false
-		for i = #stacks_supply, 1, -1 do
-			find_placement(stacks_supply[i])
-			if found then
-				break
-			end
-		end
-		if not found then
-			find_placement(deck_playable)
-		end
-		pause_frames(6)
-	end
 end
 
 function game_action_resolved()
@@ -352,7 +270,7 @@ end
 function game_count_win()
 	game_score.value += 1
 	game_save.wins += 1
-	cards_api_save(game_save)
+	suite_store_save(game_save)
 	cards_coroutine = cocreate(game_win_anim)
 end
 
